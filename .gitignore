@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# CLion files
+.idea/
+*.iml
+*.ipr
+cmake-build-debug/*
+
+# CMake files
+CMakeCache.txt
+CMakeLists.txt
