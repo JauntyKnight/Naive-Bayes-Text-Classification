@@ -86,6 +86,7 @@ private:
     bool use_idf;
     bool smooth_idf;
     bool sublinear_tf;
+    const char UNKNOWN_CHAR = '_';
 
     // internal
     std::unordered_set<char> alphabet;
@@ -145,18 +146,112 @@ private:
         for (char c : content) {
             if (alphabet.find(c) != alphabet.end()) {
                 filtered_content += c;
+            } else {
+                filtered_content += UNKNOWN_CHAR;
             }
         }
+
         return filtered_content;
     }
 
     std::vector<std::string> tokenize(const std::string &content) {
         std::vector<std::string> tokens;
+        auto words_begin = std::sregex_iterator(content.begin(), content.end(), re);
+        auto words_end = std::sregex_iterator();
 
+        for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+            std::string match_str = i->.str();
+            tokens.push_back(match_str);
+        }
 
         return tokens
     }
 
+    std::vector<std::string> get_ngrams_word(const std::vector<std::string> &tokens) {
+        std::vector<std::string> ngrams;
+        for (int i = ngram_range.first; i <= ngram_range.second; ++i) {
+            for (int j = 0; j < tokens.size() - i + 1; ++j) {
+                std::string ngram;
+                for (int k = 0; k < i; ++k) {
+                    ngram += tokens[j + k];
+                    if (k != i - 1) {
+                        ngram += " ";
+                    }
+                }
+                ngrams.push_back(ngram);
+            }
+        }
+
+        return ngrams;
+    }
+
+    std::vector<std::string> get_ngrams_char(const std::string &content) {
+        std::vector<std::string> ngrams;
+        // iterating over the content first and then over the ngrams in hope to increase cache locality
+        for (int i = 0; i < content.size(); ++i) {
+            for (int j = ngram_range.first; j <= ngram_range.second; ++j) {
+                // ngrams to the right
+                if (i + j <= content.size()) {
+                    ngrams.push_back(content.substr(i, j));
+                }
+
+                // ngrams to the left
+                if (i - j >= 0) {
+                    ngrams.push_back(content.substr(i - j, j));
+                }
+            }
+        }
+
+        return ngrams;
+    }
+
+    std::string get_ngram_char_wb_helper(const std::string &content, int start, int end) {
+        std::string ngram;
+        bool met_wb = false;
+        for (int i = start; i != end; ++i) {
+            if (content[i] == ' ') {
+                met_wb = true;
+            }
+
+            ngram += met_wb ? ' ' : content[i];
+        }
+
+        return ngram;
+    }
+
+    std::vector<std::string> get_ngrams_char_wb(const std::string &content) {
+        std::vector<std::string> ngrams;
+        // iterating over the content first and then over the ngrams in hope to increase cache locality
+        for (int i = 0; i < content.size(); ++i) {
+            for (int j = ngram_range.first; j <= ngram_range.second; ++j) {
+                // ngrams to the right
+                if (i + j <= content.size()) {
+                    ngrams.push_back(get_ngram_char_wb_helper(content, i, i + j));
+                }
+
+                // ngrams to the left
+                if (i - j >= 0) {
+                    ngrams.push_back(get_ngram_char_wb_helper(content, i - j, i));
+                }
+            }
+        }
+
+        return ngrams;
+    }
+
+    std::vector<std::string> get_ngrams(const std::string &content) {
+        if (analyzer == "word") {
+            return get_ngrams_word(tokenize(content));
+        }
+
+        if (analyzer == "char") {
+            return get_ngrams_char(content);
+        }
+
+        if (analyzer == "char_wb") {
+            return get_ngrams_char_wb(content);
+        }
+    }
 
 };
 
