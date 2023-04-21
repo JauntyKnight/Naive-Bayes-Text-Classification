@@ -21,9 +21,9 @@ public:
             std::string token_pattern="(?u)\\b\\w\\w+\\b",
             pair<int, int> ngram_range={1, 1},
             int alphabet_size=-1,
+            int use_tf=true,
             int max_df=1.0,
             int min_df=0.0,
-            int max_features=std::numeric_limits<size_t>,
             std::unordered_set<std::string> vocabulary={},
             bool use_idf=true,
             bool smooth_idf=true,
@@ -38,7 +38,6 @@ public:
         this->alphabet_size = alphabet_size;
         this->max_df = max_df;
         this->min_df = min_df;
-        this->max_features = max_features;
         this->vocabulary = vocabulary;
         this->use_idf = use_idf;
         this->smooth_idf = smooth_idf;
@@ -69,6 +68,9 @@ public:
             learn_vocabulary_df(n_grams);
         }
 
+        if (use_idf) {
+            filter_df();
+        }
         learn_word_indexes();
     }
 
@@ -106,13 +108,12 @@ private:
     int alphabet_size;
     double max_df;
     double min_df;
-    int max_features;
+    bool use_tf;
     std::unordered_set<std::string> vocabulary;
     bool use_idf;
-    bool use_tf;
     bool smooth_idf;
     bool sublinear_tf;
-    const char UNKNOWN_CHAR = '_';
+    const char unknown_char = '_';
 
     // internal
     std::unordered_set<char> alphabet;
@@ -181,7 +182,7 @@ private:
             if (alphabet.find(c) != alphabet.end()) {
                 filtered_content += c;
             } else {
-                filtered_content += UNKNOWN_CHAR;
+                filtered_content += unknown_char;
             }
         }
 
@@ -305,6 +306,17 @@ private:
         }
     }
 
+    void filter_df() {
+        for (auto it = learned_vocabulary.begin(); it != learned_vocabulary.end();) {
+            double df = (double) it->second / (double) n_documents;
+            if (df < min_df || df > max_df) {
+                it = learned_vocabulary.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     void learn_word_indexes() {
         int index = 0;
         for (const auto &word : learned_vocabulary) {
@@ -321,24 +333,18 @@ private:
                 n_gram_count[n_gram]++;
             }
 
-            if (sublinear_tf) {
-                for (const auto &n_gram: n_gram_count) {
-                    tf_idf_vector[word_indexes[n_gram.first]] = 1 + std::log(n_gram.second);
-                }
-            } else {
-                for (const auto &n_gram: n_gram_count) {
-                    tf_idf_vector[word_indexes[n_gram.first]] = n_gram.second;
-                }
+            for (const auto &n_gram: n_gram_count) {
+                tf_idf_vector[word_indexes[n_gram.first]] = sublinear_tf ? 1 + std::log(n_gram.second) : n_gram.second;
             }
         } else {
             std::fill(tf_idf_vector.begin(), tf_idf_vector.end(), 1);
         }
 
         if (use_idf) {
-            for (const auto &n_gram: n_gram_count) {
-                double df = (double) learned_vocabulary[n_gram.first] / nr_documents;
-                double clipped_df = std::min(std::max(df, min_df), max_df);
-                tf_idf_vector[word_indexes[n_gram.first]] *= std::log(1 / clipped_df);
+            for (const std::string &n_gram: n_grams) {
+                tf_idf_vector[word_indexes[n_gram]] *= std::log(
+                        (double) n_documents / ((double) learned_vocabulary[n_gram] + (smooth_idf ? 1 : 0))
+                        );
             }
         }
 
