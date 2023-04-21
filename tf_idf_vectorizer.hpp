@@ -45,8 +45,11 @@ public:
         this->sublinear_tf = sublinear_tf;
     }
 
+    // learn the vocabulary and df from the training set
     template<typename Iter>
     void fit(const Iter &documents_begin, const Iter &documents_end) {
+        alphabet.clear();
+        learned_vocabulary.clear();
         // build alphabet
         build_alphabet(documents_begin, documents_end);
 
@@ -57,13 +60,29 @@ public:
                 std::transform(content.begin(), content.end(), content.begin(), std::tolower);
             }
 
+            std::vector<std::string> n_grams = get_n_grams(content);
 
-            auto words_begin = std::sregex_iterator(content.begin(), content.end(), re);
-            auto words_end = std::sregex_iterator();
-
-
+            learn_vocabulary_df(n_grams);
         }
     }
+
+    template <typename Iter>
+    matrix transform(const Iter &documents_begin, const Iter &documents_end) {
+        matrix result;
+        for (auto it = documents_begin; it != documents_end; ++it) {
+            std::string content = get_document_content(*it);
+
+            if (lowercase) {
+                std::transform(content.begin(), content.end(), content.begin(), std::tolower);
+            }
+
+            std::vector<std::string> n_grams = get_n_grams(content);
+
+            result.push_back(get_document_vector(n_grams));
+        }
+        return result;
+    }
+
 
     template<typename Iter>
     void fit_transform(const Iter &begin, const Iter &end);
@@ -72,7 +91,6 @@ public:
 private:
     // params
     std::string input;
-    std::unordered_map<std::string, int> word_count;
     bool lowercase;
     std::string analyzer;
     std::unordered_set<std::string> stop_words;
@@ -90,6 +108,15 @@ private:
 
     // internal
     std::unordered_set<char> alphabet;
+    std::unordered_map<std::string, int> learned_vocabulary;
+    size_t nr_documents;
+
+    using matrix = std::vector<std::vector<double>>;
+
+    struct word_count_pair {
+        int tf;
+        int df;
+    };
 
     template <typename Iter>
     void build_alphabet(const Iter &begin, const Iter &end) {
@@ -103,6 +130,9 @@ private:
         for (auto it = begin; it != end; ++it) {
             std::string content = get_document_content(*it);
             for (char c : content) {
+                if (lowercase) {
+                    c = std::tolower(c);
+                }
                 char_count[c]++;
             }
         }
@@ -154,6 +184,7 @@ private:
         return filtered_content;
     }
 
+    // tokenize the content of a document
     std::vector<std::string> tokenize(const std::string &content) {
         std::vector<std::string> tokens;
         auto words_begin = std::sregex_iterator(content.begin(), content.end(), re);
@@ -161,7 +192,13 @@ private:
 
         for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
             std::string match_str = i->.str();
-            tokens.push_back(match_str);
+            if (
+                    !match_str.empty()
+                    && stop_words.find(match_str) == stop_words.end()
+                    && (vocabulary.empty() || vocabulary.find(match_str) != vocabulary.end())
+                ) {
+                tokens.push_back(filter_by_alphabet(match_str));
+            }
         }
 
         return tokens
@@ -239,20 +276,30 @@ private:
         return ngrams;
     }
 
+    void learn_vocabulary_df(const std::vector<std::string> &n_grams) {
+        std::unordered_set<std::string> encountered_n_grams;
+
+        for (const std::string &n_gram : n_grams) {
+            if (encountered_n_grams.find(n_gram) == encountered_n_grams.end()) {
+                learned_vocabulary[n_gram]++;
+                encountered_n_grams.insert(n_gram);
+            }
+        }
+    }
+
     std::vector<std::string> get_ngrams(const std::string &content) {
         if (analyzer == "word") {
             return get_ngrams_word(tokenize(content));
         }
 
         if (analyzer == "char") {
-            return get_ngrams_char(content);
+            return get_ngrams_char(filter_by_alphabet(content));
         }
 
         if (analyzer == "char_wb") {
-            return get_ngrams_char_wb(content);
+            return get_ngrams_char_wb(filter_by_alphabet(content));
         }
     }
-
 };
 
 
