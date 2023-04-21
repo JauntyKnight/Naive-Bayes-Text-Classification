@@ -53,7 +53,11 @@ public:
         // build alphabet
         build_alphabet(documents_begin, documents_end);
 
+        nr_documents = 0;
+
         for (auto it = documents_begin; it != documents_end; ++it) {
+            nr_documents++;
+
             std::string content = get_document_content(*it);
 
             if (lowercase) {
@@ -64,6 +68,8 @@ public:
 
             learn_vocabulary_df(n_grams);
         }
+
+        learn_word_indexes();
     }
 
     template <typename Iter>
@@ -83,11 +89,12 @@ public:
         return result;
     }
 
+    template <typename Iter>
+    matrix fit_transform(const Iter &documents_begin, const Iter &documents_end) {
+        fit(documents_begin, documents_end);
+        return transform(documents_begin, documents_end);
+    }
 
-    template<typename Iter>
-    void fit_transform(const Iter &begin, const Iter &end);
-    template<typename Iter>
-    void transform(const Iter &begin, const Iter &end);
 private:
     // params
     std::string input;
@@ -102,6 +109,7 @@ private:
     int max_features;
     std::unordered_set<std::string> vocabulary;
     bool use_idf;
+    bool use_tf;
     bool smooth_idf;
     bool sublinear_tf;
     const char UNKNOWN_CHAR = '_';
@@ -109,14 +117,10 @@ private:
     // internal
     std::unordered_set<char> alphabet;
     std::unordered_map<std::string, int> learned_vocabulary;
+    std::unordered_map<std::string, int> word_indexes;
     size_t nr_documents;
 
-    using matrix = std::vector<std::vector<double>>;
-
-    struct word_count_pair {
-        int tf;
-        int df;
-    };
+    using matrix = std::vector<std::vector<double> >;
 
     template <typename Iter>
     void build_alphabet(const Iter &begin, const Iter &end) {
@@ -299,6 +303,46 @@ private:
         if (analyzer == "char_wb") {
             return get_ngrams_char_wb(filter_by_alphabet(content));
         }
+    }
+
+    void learn_word_indexes() {
+        int index = 0;
+        for (const auto &word : learned_vocabulary) {
+            word_indexes[word.first] = index++;
+        }
+    }
+
+    std::vector<double> get_tf_idf_vector(const std::vector<std::string> &n_grams) {
+        std::vector<double> tf_idf_vector(learned_vocabulary.size(), 0);
+        std::unordered_map<std::string, int> n_gram_count;
+
+        if (use_tf) {
+            for (const std::string &n_gram: n_grams) {
+                n_gram_count[n_gram]++;
+            }
+
+            if (sublinear_tf) {
+                for (const auto &n_gram: n_gram_count) {
+                    tf_idf_vector[word_indexes[n_gram.first]] = 1 + std::log(n_gram.second);
+                }
+            } else {
+                for (const auto &n_gram: n_gram_count) {
+                    tf_idf_vector[word_indexes[n_gram.first]] = n_gram.second;
+                }
+            }
+        } else {
+            std::fill(tf_idf_vector.begin(), tf_idf_vector.end(), 1);
+        }
+
+        if (use_idf) {
+            for (const auto &n_gram: n_gram_count) {
+                double df = (double) learned_vocabulary[n_gram.first] / nr_documents;
+                double clipped_df = std::min(std::max(df, min_df), max_df);
+                tf_idf_vector[word_indexes[n_gram.first]] *= std::log(1 / clipped_df);
+            }
+        }
+
+        return tf_idf_vector;
     }
 };
 
