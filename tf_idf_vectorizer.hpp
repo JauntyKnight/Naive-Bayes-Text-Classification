@@ -9,33 +9,48 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <regex>
+#include <vector>
+#include <cmath>
 
 class tf_idf_vectorizer {
 public:
-    tf_idf_vectorizer();
+    using matrix = std::vector<std::vector<double> >;
+
     tf_idf_vectorizer(
             std::string input="content",
             bool lowercase=true,
             std::string analyzer="word",
             std::unordered_set<std::string> stop_words={},
-            std::string token_pattern="(?u)\\b\\w\\w+\\b",
-            pair<int, int> ngram_range={1, 1},
-            int alphabet_size=-1,
-            int use_tf=true,
-            int max_df=1.0,
-            int min_df=0.0,
+            std::string token_pattern="\\b\\w\\w+\\b",
+            std::pair<int, int> ngram_range=std::make_pair(1, 1),
+            size_t alphabet_size=std::numeric_limits<size_t>::max(),
+            bool use_tf=true,
+            int max_df=std::numeric_limits<int>::max(),
+            int min_df=0,
             std::unordered_set<std::string> vocabulary={},
             bool use_idf=true,
             bool smooth_idf=true,
-            bool sublinear_tf=false,
-            ) {
+            bool sublinear_tf=false
+    ) {
         this->input = input;
         this->lowercase = lowercase;
+
+        if (analyzer != "word" && analyzer != "char" && analyzer != "char_wb") {
+            throw std::invalid_argument("analyzer must be either 'word', 'char' or 'char_wb'");
+        }
         this->analyzer = analyzer;
         this->stop_words = stop_words;
         this->token_pattern = token_pattern;
+        if (ngram_range.first < 1 || ngram_range.second < 1) {
+            throw std::invalid_argument("ngram_range must be positive");
+        }
+        if (ngram_range.first > ngram_range.second) {
+            throw std::invalid_argument("ngram_range must be (min_n, max_n) with min_n <= max_n");
+        }
         this->ngram_range = ngram_range;
         this->alphabet_size = alphabet_size;
+        this->use_tf = use_tf;
         this->max_df = max_df;
         this->min_df = min_df;
         this->vocabulary = vocabulary;
@@ -52,7 +67,7 @@ public:
         // build alphabet
         build_alphabet(documents_begin, documents_end);
 
-        nr_documents = 0;
+        nr_documents = smooth_idf ? 1 : 0;
 
         for (auto it = documents_begin; it != documents_end; ++it) {
             nr_documents++;
@@ -60,10 +75,10 @@ public:
             std::string content = get_document_content(*it);
 
             if (lowercase) {
-                std::transform(content.begin(), content.end(), content.begin(), std::tolower);
+                std::transform(content.begin(), content.end(), content.begin(), [](char c) { return std::tolower(c); });
             }
 
-            std::vector<std::string> n_grams = get_n_grams(content);
+            std::vector<std::string> n_grams = get_ngrams(content);
 
             learn_vocabulary_df(n_grams);
         }
@@ -71,7 +86,8 @@ public:
         if (use_idf) {
             filter_df();
         }
-        learn_word_indexes();
+
+        learn_word_indices();
     }
 
     template <typename Iter>
@@ -81,10 +97,10 @@ public:
             std::string content = get_document_content(*it);
 
             if (lowercase) {
-                std::transform(content.begin(), content.end(), content.begin(), std::tolower);
+                std::transform(content.begin(), content.end(), content.begin(), [](char c) { return std::tolower(c); });
             }
 
-            std::vector<std::string> n_grams = get_n_grams(content);
+            std::vector<std::string> n_grams = get_ngrams(content);
 
             result.push_back(get_document_vector(n_grams));
         }
@@ -97,6 +113,143 @@ public:
         return transform(documents_begin, documents_end);
     }
 
+    // getters and setters for the parameters
+    const std::string &get_input() const {
+        return input;
+    }
+
+    void set_input(const std::string &input) {
+        tf_idf_vectorizer::input = input;
+    }
+
+    bool is_lowercase() const {
+        return lowercase;
+    }
+
+    void set_lowercase(bool lowercase) {
+        tf_idf_vectorizer::lowercase = lowercase;
+    }
+
+    const std::string &get_analyzer() const {
+        return analyzer;
+    }
+
+    void set_analyzer(const std::string &analyzer) {
+        tf_idf_vectorizer::analyzer = analyzer;
+    }
+
+    const std::unordered_set<std::string> &get_stop_words() const {
+        return stop_words;
+    }
+
+    void set_stop_words(const std::unordered_set<std::string> &stop_words) {
+        tf_idf_vectorizer::stop_words = stop_words;
+    }
+
+    const std::string &get_token_pattern() const {
+        return token_pattern;
+    }
+
+    void set_token_pattern(const std::string &token_pattern) {
+        tf_idf_vectorizer::token_pattern = token_pattern;
+    }
+
+    const std::pair<int, int> &get_ngram_range() const {
+        return ngram_range;
+    }
+
+    void set_ngram_range(const std::pair<int, int> &ngram_range) {
+        tf_idf_vectorizer::ngram_range = ngram_range;
+    }
+
+    int get_alphabet_size() const {
+        return alphabet_size;
+    }
+
+    void set_alphabet_size(int alphabet_size) {
+        tf_idf_vectorizer::alphabet_size = alphabet_size;
+    }
+
+    int getMax_df() const {
+        return max_df;
+    }
+
+    void setMax_df(int max_df) {
+        tf_idf_vectorizer::max_df = max_df;
+    }
+
+    int getMin_df() const {
+        return min_df;
+    }
+
+    void setMin_df(int min_df) {
+        tf_idf_vectorizer::min_df = min_df;
+    }
+
+    bool isUse_tf() const {
+        return use_tf;
+    }
+
+    void setUse_tf(bool use_tf) {
+        tf_idf_vectorizer::use_tf = use_tf;
+    }
+
+    const std::unordered_set<std::string> &getVocabulary() const {
+        return vocabulary;
+    }
+
+    void setVocabulary(const std::unordered_set<std::string> &vocabulary) {
+        tf_idf_vectorizer::vocabulary = vocabulary;
+    }
+
+    bool isUse_idf() const {
+        return use_idf;
+    }
+
+    void setUse_idf(bool use_idf) {
+        tf_idf_vectorizer::use_idf = use_idf;
+    }
+
+    bool isSmooth_idf() const {
+        return smooth_idf;
+    }
+
+    void setSmooth_idf(bool smooth_idf) {
+        tf_idf_vectorizer::smooth_idf = smooth_idf;
+    }
+
+    bool isSublinear_tf() const {
+        return sublinear_tf;
+    }
+
+    void setSublinear_tf(bool sublinear_tf) {
+        tf_idf_vectorizer::sublinear_tf = sublinear_tf;
+    }
+
+    const std::unordered_map<std::string, int> &getLearned_vocabulary() const {
+        return learned_vocabulary;
+    }
+
+    const std::unordered_map<std::string, int> &getWord_indices() const {
+        return word_indices;
+    }
+
+    size_t getNr_documents() const {
+        return nr_documents;
+    }
+
+    const std::unordered_set<char> &getAlphabet() const {
+        return alphabet;
+    }
+
+    const char getUnknown_char() const {
+        return unknown_char;
+    }
+
+    const size_t getVocabulary_size() const {
+        return word_indices.size();
+    }
+
 private:
     // params
     std::string input;
@@ -104,29 +257,26 @@ private:
     std::string analyzer;
     std::unordered_set<std::string> stop_words;
     std::string token_pattern;
-    pair<int, int> ngram_range;
-    int alphabet_size;
-    double max_df;
-    double min_df;
+    std::pair<int, int> ngram_range;
+    size_t alphabet_size;
+    int max_df;
+    int min_df;
     bool use_tf;
     std::unordered_set<std::string> vocabulary;
     bool use_idf;
     bool smooth_idf;
     bool sublinear_tf;
-    const char unknown_char = '_';
+    char unknown_char = '_';
 
     // internal
     std::unordered_set<char> alphabet;
     std::unordered_map<std::string, int> learned_vocabulary;
-    std::unordered_map<std::string, int> word_indexes;
+    std::unordered_map<std::string, int> word_indices;
     size_t nr_documents;
-
-    using matrix = std::vector<std::vector<double> >;
 
     template <typename Iter>
     void build_alphabet(const Iter &begin, const Iter &end) {
-        // alphabet_size of -1 means all characters
-        if (alphabet_size == -1) {
+        if (alphabet_size == std::numeric_limits<int>::max()) {
             return;
         }
 
@@ -166,10 +316,14 @@ private:
             file.close();
         }
 
-        if (input == "file") {
-            return std::string((std::istreambuf_iterator<char>(document)),
-                               std::istreambuf_iterator<char>());
-        }
+        // input == "file" from now on
+        // read the contents of the file
+        std::ifstream file(document);
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        file.close();
+
+        return content;
     }
 
     std::string filter_by_alphabet(std::string content) {
@@ -192,21 +346,22 @@ private:
     // tokenize the content of a document
     std::vector<std::string> tokenize(const std::string &content) {
         std::vector<std::string> tokens;
+        std::regex re(token_pattern);
         auto words_begin = std::sregex_iterator(content.begin(), content.end(), re);
         auto words_end = std::sregex_iterator();
 
-        for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-            std::string match_str = i->.str();
+        for (auto i = words_begin; i != words_end; ++i) {
+            std::string match_str = i->str();
             if (
                     !match_str.empty()
                     && stop_words.find(match_str) == stop_words.end()
                     && (vocabulary.empty() || vocabulary.find(match_str) != vocabulary.end())
-                ) {
+                    ) {
                 tokens.push_back(filter_by_alphabet(match_str));
             }
         }
 
-        return tokens
+        return tokens;
     }
 
     std::vector<std::string> get_ngrams_word(const std::vector<std::string> &tokens) {
@@ -301,14 +456,13 @@ private:
             return get_ngrams_char(filter_by_alphabet(content));
         }
 
-        if (analyzer == "char_wb") {
-            return get_ngrams_char_wb(filter_by_alphabet(content));
-        }
+        // analyzer == "char_wb"
+        return get_ngrams_char_wb(filter_by_alphabet(content));
     }
 
     void filter_df() {
         for (auto it = learned_vocabulary.begin(); it != learned_vocabulary.end();) {
-            double df = (double) it->second / (double) n_documents;
+            double df = (double) it->second / (double) nr_documents;
             if (df < min_df || df > max_df) {
                 it = learned_vocabulary.erase(it);
             } else {
@@ -317,14 +471,14 @@ private:
         }
     }
 
-    void learn_word_indexes() {
+    void learn_word_indices() {
         int index = 0;
         for (const auto &word : learned_vocabulary) {
-            word_indexes[word.first] = index++;
+            word_indices[word.first] = index++;
         }
     }
 
-    std::vector<double> get_tf_idf_vector(const std::vector<std::string> &n_grams) {
+    std::vector<double> get_document_vector(const std::vector<std::string> &n_grams) {
         std::vector<double> tf_idf_vector(learned_vocabulary.size(), 0);
         std::unordered_map<std::string, int> n_gram_count;
 
@@ -334,7 +488,8 @@ private:
             }
 
             for (const auto &n_gram: n_gram_count) {
-                tf_idf_vector[word_indexes[n_gram.first]] = sublinear_tf ? 1 + std::log(n_gram.second) : n_gram.second;
+                double tf = (double)n_gram.second / (double)n_grams.size();
+                tf_idf_vector[word_indices[n_gram.first]] = sublinear_tf ? 1 + std::log(tf) : tf;
             }
         } else {
             std::fill(tf_idf_vector.begin(), tf_idf_vector.end(), 1);
@@ -342,9 +497,7 @@ private:
 
         if (use_idf) {
             for (const std::string &n_gram: n_grams) {
-                tf_idf_vector[word_indexes[n_gram]] *= std::log(
-                        (double) n_documents / ((double) learned_vocabulary[n_gram] + (smooth_idf ? 1 : 0))
-                        );
+                tf_idf_vector[word_indices[n_gram]] *= (1 + std::log((double) nr_documents / ((double) learned_vocabulary[n_gram] + (smooth_idf ? 1 : 0))));
             }
         }
 
