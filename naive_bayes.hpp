@@ -14,10 +14,7 @@
 class NaiveBayes {
 public:
     virtual void fit(std::vector<std::vector<double> > X, std::vector<size_t> y);
-    virtual std::vector<size_t> predict(std::vector<std::vector<double> > X);
-    virtual std::vector<std::vector<double> > predict_proba(std::vector<std::vector<double> > X);
     virtual std::vector<double> predict_single_proba(std::vector<double> x);
-    virtual size_t predict_single(std::vector<double> x);
 
     virtual ~NaiveBayes() = default;
 
