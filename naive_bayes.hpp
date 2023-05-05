@@ -13,17 +13,17 @@
 // the base clas for naive bayes
 class NaiveBayes {
 public:
-    virtual void fit(std::vector<std::vector<double> > X, std::vector<size_t> y);
-    virtual std::vector<double> predict_single_proba(std::vector<double> x);
+    virtual void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y);
+    virtual std::vector<double> predict_single_proba(const std::vector<double> &x);
 
     virtual ~NaiveBayes() = default;
 
-    size_t predict_single(std::vector<double> x) {
+    size_t predict_single(const std::vector<double> &x) {
         auto probabilities = predict_single_proba(x);
         return argmax(probabilities.begin(), probabilities.end());
     }
 
-    std::vector<size_t> predict(std::vector<std::vector<double> > X) {
+    std::vector<size_t> predict(const std::vector<std::vector<double> > &X) {
         std::vector<size_t> predictions(X.size(), 0);
         for (size_t i = 0; i < X.size(); ++i) {
             predictions[i] = predict_single(X[i]);
@@ -32,7 +32,7 @@ public:
         return predictions;
     }
 
-    std::vector<std::vector<double> > predict_proba(std::vector<std::vector<double> > X) {
+    std::vector<std::vector<double> > predict_proba(const std::vector<std::vector<double> > &X) {
         std::vector<std::vector<double> > probabilities(X.size(), std::vector<double>(n_classes, 0));
         for (size_t i = 0; i < X.size(); ++i) {
             probabilities[i] = predict_single_proba(X[i]);
@@ -41,7 +41,7 @@ public:
         return probabilities;
     }
 
-    double score(std::vector<std::vector<double> > X, std::vector<size_t> y) {
+    double score(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         if (X.size() != y.size()) {
             throw std::invalid_argument("X and y must have the same number of samples");
         }
@@ -64,11 +64,11 @@ public:
 
 
 class GaussianNB : public NaiveBayes {
-    GaussianNB(double smoothing=1e-9, std::vector<double> class_priors={}) : smoothing(smoothing), class_priors(class_priors) {
+    GaussianNB(double smoothing=1e-9, const std::vector<double> &class_priors={}) : smoothing(smoothing), class_priors(class_priors) {
         set_priors = !class_priors.empty();
     }
 
-    void fit(std::vector<std::vector<double> > X, std::vector<size_t> y) {
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         if (X.size() != y.size()) {
             throw std::invalid_argument("X and y must have the same number of samples");
         }
@@ -100,7 +100,7 @@ class GaussianNB : public NaiveBayes {
         }
     }
 
-    std::vector<double> predict_single_proba(std::vector<double> x) {
+    std::vector<double> predict_single_proba(const std::vector<double> &x) {
         std::vector<double> probabilities;
         for (size_t i = 0; i < n_classes; ++i) {
             double probability = class_priors[i];
@@ -134,7 +134,7 @@ class GaussianNB : public NaiveBayes {
         set_priors = true;
     }
 private:
-    void compute_means(std::vector<std::vector<double> > X, std::vector<size_t> y) {
+    void compute_means(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         // first a pass to compute the sums and class counts
         for (size_t i = 0; i < X.size(); ++i) {
             for (size_t j = 0; j < X[i].size(); ++j) {
@@ -151,7 +151,7 @@ private:
         }
     }
 
-    void compute_variances(std::vector<std::vector<double> > X, std::vector<size_t> y) {
+    void compute_variances(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         for (size_t i = 0; i < X.size(); ++i) {
             for (size_t j = 0; j < X[i].size(); ++j) {
                 variances[y[i]][j] += (X[i][j] - means[y[i]][j]) * (X[i][j] - means[y[i]][j]);
@@ -177,11 +177,11 @@ private:
 
 class BernoulliNB : public NaiveBayes {
 public:
-    BernoulliNB(double alpha=1.0, std::vector<double> class_priors={}) : alpha(alpha), class_priors(class_priors) {
+    BernoulliNB(double alpha=1.0, const std::vector<double> &class_priors={}) : alpha(alpha), class_priors(class_priors) {
         set_priors = !class_priors.empty();
     }
 
-    void fit(std::vector<std::vector<double> > X, std::vector<size_t> y) {
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         if (X.size() != y.size()) {
             throw std::invalid_argument("X and y must have the same number of samples");
         }
@@ -205,7 +205,7 @@ public:
         }
     }
 
-    std::vector<double> predict_single_proba(std::vector<double> x) {
+    std::vector<double> predict_single_proba(const std::vector<double> &x) {
         std::vector<double> probabilities(n_classes, 0);
         for (size_t i = 0; i < n_classes; ++i) {
             probabilities[i] = std::log(class_priors[i]);
@@ -234,7 +234,7 @@ public:
         set_priors = true;
     }
 private:
-    void compute_means(std::vector<std::vector<double> > X, std::vector<size_t> y) {
+    void compute_means(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         // first a pass to compute the sums and class counts
         for (size_t i = 0; i < X.size(); ++i) {
             for (size_t j = 0; j < X[i].size(); ++j) {
@@ -257,4 +257,70 @@ private:
     std::vector<std::vector<double> > variances;
     std::vector<size_t> class_counts;
     double alpha;
+};
+
+
+class MultinomialNB : public NaiveBayes {
+public:
+    MultinomialNB(double alpha=1.0, const std::vector<double> class_priors={}) : alpha(alpha), class_priors(class_priors) {
+        set_priors = !class_priors.empty();
+    }
+
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<double> &y) {
+        if (X.size() != y.size()) {
+            throw std::invalid_argument("X and y must have the same number of samples");
+        }
+
+        if (!set_priors) {
+            n_classes = *std::max_element(y.begin(), y.end()) + 1;
+            class_priors = std::vector<double>(n_classes, 0);
+        } else {
+            n_classes = class_priors.size();
+        }
+
+        class_features_sum = std::vector<std::vector<double> >(n_classes, std::vector<double>(X[0].size(), 0));
+        compute_class_features_sum(X, y);
+        compute_priors();
+    }
+
+private:
+    std::vector<std::vector<double> > compute_class_features_sum(const std::vector<std::vector<double> > &X, const std::vector<double> &y) {
+        std::vector<std::vector<double> > class_features_sum(n_classes, std::vector<double>(X[0].size(), 0));
+        for (size_t i = 0; i < X.size(); ++i) {
+            for (size_t j = 0; j < X[i].size(); ++j) {
+                class_features_sum[y[i]][j] += X[i][j];
+            }
+        }
+
+        return class_features_sum;
+    }
+
+    void compute_probabilities() {
+        const size_t D = class_features_sum[0].size();
+
+        std::vector<double> sums(n_classes, 0);
+
+        for (size_t i = 0; i < n_classes; ++i) {
+            for (size_t j = 0; j < D; ++j) {
+                sums[i] += class_features_sum[i][j];
+            }
+        }
+    }
+
+    void compute_priors(const std::vector<double> &y) {
+        for (size_t i = 0; i < y.size(); ++i) {
+            class_priors[y[i]] += 1;
+        }
+
+        for (size_t i = 0; i < n_classes; ++i) {
+            class_priors[i] = std::log(class_priors[i] / y.size());
+        }
+    }
+
+    double alpha;
+    bool set_priors;
+    std::vector<double> class_priors;
+    size_t n_classes;
+    std::vector<std::vector<double> > variances;
+    std::vector<std::vector<double> > class_features_sum;
 };
