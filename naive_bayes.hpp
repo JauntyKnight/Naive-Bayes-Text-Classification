@@ -17,7 +17,7 @@
 // the base clas for naive bayes
 class NaiveBayes {
 public:
-    virtual void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         if (X.size() != y.size()) {
             throw std::invalid_argument("X and y must have the same number of samples");
         }
@@ -30,9 +30,8 @@ public:
             n_classes = class_priors.size();
         }
     }
-    virtual std::vector<double> predict_single_proba(const std::vector<double> &x);
 
-    virtual ~NaiveBayes() = default;
+    std::vector<double> predict_single_proba(const std::vector<double> &x);
 
     size_t predict_single(const std::vector<double> &x) {
         auto probabilities = predict_single_proba(x);
@@ -94,13 +93,14 @@ protected:
 
 
 class GaussianNB : public NaiveBayes {
+public:
     GaussianNB(double smoothing=1e-9, const std::vector<double> &class_priors={}) {
         set_priors = !class_priors.empty();
         this->class_priors = class_priors;
         this->smoothing = smoothing;
     }
 
-    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) override {
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         NaiveBayes::fit(X, y);
 
         // initialize the means and variances
@@ -112,7 +112,7 @@ class GaussianNB : public NaiveBayes {
         compute_variances(X, y);
     }
 
-    std::vector<double> predict_single_proba(const std::vector<double> &x) override {
+    std::vector<double> predict_single_proba(const std::vector<double> &x) {
         std::vector<double> probabilities;
         for (size_t i = 0; i < n_classes; ++i) {
             double probability = class_priors[i];
@@ -145,6 +145,8 @@ class GaussianNB : public NaiveBayes {
     //     this->priors = priors;
     //     set_priors = true;
     // }
+
+    ~GaussianNB() = default;
 private:
     void compute_means(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         // first a pass to compute the sums and class counts
@@ -192,7 +194,7 @@ public:
         this->alpha = alpha;
     }
 
-    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) override {
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         NaiveBayes::fit(X, y);
 
         auto means = compute_means(X, y);
@@ -200,7 +202,7 @@ public:
         compute_weights(means);
     }
 
-    std::vector<double> predict_single_proba(const std::vector<double> &x) override {
+    std::vector<double> predict_single_proba(const std::vector<double> &x) {
         std::vector<double> probabilities(n_classes, 0);
         for (size_t i = 0; i < n_classes; ++i) {
             probabilities[i] = biases[i];
@@ -284,13 +286,13 @@ public:
         this->alpha = alpha;
     }
 
-    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) override {
+    void fit(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         NaiveBayes::fit(X, y);
 
         compute_weights(X, y);
     }
 
-    std::vector<double> predict_single_proba(const std::vector<double> &x) override {
+    std::vector<double> predict_single_proba(const std::vector<double> &x) {
         std::vector<double> logits(n_classes, 0);
 
         for (size_t i = 0; i < n_classes; ++i) {
