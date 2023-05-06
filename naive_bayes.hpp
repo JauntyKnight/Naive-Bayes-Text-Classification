@@ -11,6 +11,7 @@
 #include <array>
 #include <iterator>
 #include <cmath>
+#include <algorithm>
 
 
 // the base clas for naive bayes
