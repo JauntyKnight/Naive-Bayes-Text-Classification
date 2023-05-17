@@ -7,7 +7,7 @@ from scipy.stats import norm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset_path", default="digits.txt", type=str, help="Dataset path")
-parser.add_argument("--classifier", default="gaussian", type=str, help="Classifier type")
+parser.add_argument("--classifier", default="bernoulli", type=str, help="Classifier type")
 parser.add_argument("--test_size", default=0.5, type=lambda x: int(x) if x.isdigit() else float(x), help="Test size")
 parser.add_argument("--alpha", default=1, type=float, help="Alpha parameter")
 
@@ -57,10 +57,15 @@ def gaussianNB(train_data, train_target, test_data, test_target):
             means[k][d] = np.sum([train_data[i][d] if train_target[i] == k else 0 for i in range(train_data.shape[0])]) / (priors[k] * train_target.shape[0])
             vars[k][d] = (np.sum([((train_data[i][d] - means[k][d]) ** 2) if train_target[i] == k else 0 for i in range(train_data.shape[0])]) / (priors[k] * train_target.shape[0]) + args.alpha) ** 0.5
 
+    correctly_classified = 0
+
     # Prediction
     for sample in test_data:
         predictions = [np.product(norm.pdf(sample, means[k], vars[k])) * priors[k] for k in range(CLASSES)]
-        print(*predictions)
+        if np.argmax(predictions) == test_target[correctly_classified]:
+            correctly_classified += 1
+    
+    print(correctly_classified / test_target.shape[0])
 
 
 def bernoulliNB(train_data, train_target, test_data, test_target):
@@ -90,16 +95,22 @@ def bernoulliNB(train_data, train_target, test_data, test_target):
             probs[k][d] = (np.sum([train_data[i][d] if train_target[i] == k else 0 for i in range(train_data.shape[0])]) + args.alpha) / (priors[k] * train_target.shape[0] + 2 * args.alpha)
 
     biases = [log(priors[k]) + np.sum([log(1 - probs[k][d]) for d in range(train_data.shape[1])]) for k in range(CLASSES)]
+    print(biases)
 
     weights = np.zeros((CLASSES, train_data.shape[1]))
     for k in range(weights.shape[0]):
         for d in range(weights.shape[1]):
             weights[k][d] = log(probs[k][d] / (1 - probs[k][d]))
 
+    correclty_classified = 0
+
     # Prediction
     for sample in test_data:
         predictions = [biases[k] + sample.T @ weights[k] for k in range(CLASSES)]
-        print(*predictions)
+        if np.argmax(predictions) == test_target[correclty_classified]:
+            correclty_classified += 1
+    
+    print(correclty_classified / test_target.shape[0])
 
 
 def multinomialNB(train_data, train_target, test_data, test_target):

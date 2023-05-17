@@ -25,13 +25,16 @@ public:
         if (!set_priors) {
             n_classes = *std::max_element(y.begin(), y.end()) + 1;
             class_priors = std::vector<double>(n_classes, 0);
+            class_counts = std::vector<size_t>(n_classes, 0);
             compute_priors(y);
         } else {
             n_classes = class_priors.size();
         }
     }
 
-    std::vector<double> predict_single_proba(const std::vector<double> &x);
+    virtual std::vector<double> predict_single_proba(const std::vector<double> &x) {
+        return std::vector<double>();
+    }
 
     size_t predict_single(const std::vector<double> &x) {
         auto probabilities = predict_single_proba(x);
@@ -71,6 +74,8 @@ public:
         return (double)correct / X.size();
     }
 
+    virtual ~NaiveBayes() = default;
+
     template<typename Iter>
     size_t argmax(const Iter &begin, const Iter &end) {
         return std::distance(begin, std::max_element(begin, end));
@@ -78,16 +83,17 @@ public:
 protected:
     void compute_priors(const std::vector<size_t> &y) {
         for (size_t i = 0; i < y.size(); ++i) {
-            class_priors[y[i]] += 1;
+            class_counts[y[i]] += 1;
         }
 
         for (size_t i = 0; i < n_classes; ++i) {
-            class_priors[i] /= y.size();
+            class_priors[i] = (double)class_counts[i] / y.size();
         }
     }
 
     bool set_priors;
     std::vector<double> class_priors;
+    std::vector<size_t> class_counts;
     size_t n_classes;
 };
 
@@ -106,13 +112,12 @@ public:
         // initialize the means and variances
         means = std::vector<std::vector<double> >(n_classes, std::vector<double>(X[0].size(), 0));
         variances = std::vector<std::vector<double> >(n_classes, std::vector<double>(X[0].size(), 0));
-        class_counts = std::vector<size_t>(n_classes, 0);
 
         compute_means(X, y);
         compute_variances(X, y);
     }
 
-    std::vector<double> predict_single_proba(const std::vector<double> &x) {
+    virtual std::vector<double> predict_single_proba(const std::vector<double> &x) override {
         std::vector<double> probabilities;
         for (size_t i = 0; i < n_classes; ++i) {
             double probability = class_priors[i];
@@ -154,13 +159,12 @@ private:
             for (size_t j = 0; j < X[i].size(); ++j) {
                 means[y[i]][j] += X[i][j];
             }
-            class_counts[y[i]] += 1;
         }
 
         // the second pass to compute the means
-        for (size_t i = 0; i < X.size(); ++i) {
-            for (size_t j = 0; j < X[i].size(); ++j) {
-                means[y[i]][j] /= class_counts[y[i]];
+        for (size_t i = 0; i < means.size(); ++i) {
+            for (size_t j = 0; j < means[0].size(); ++j) {
+                means[i][j] /= class_counts[i];
             }
         }
     }
@@ -172,9 +176,9 @@ private:
             }
         }
 
-        for (size_t i = 0; i < X.size(); ++i) {
-            for (size_t j = 0; j < X[i].size(); ++j) {
-                variances[y[i]][j] = std::sqrt(variances[y[i]][j] / class_counts[y[i]] + smoothing);
+        for (size_t i = 0; i < variances.size(); ++i) {
+            for (size_t j = 0; j < variances[0].size(); ++j) {
+                variances[i][j] = std::sqrt(variances[i][j] / class_counts[i] + smoothing);
             }
         }
     }
@@ -182,7 +186,6 @@ private:
     double smoothing;
     std::vector<std::vector<double> > means;
     std::vector<std::vector<double> > variances;
-    std::vector<size_t> class_counts;
 };
 
 
@@ -198,8 +201,12 @@ public:
         NaiveBayes::fit(X, y);
 
         auto means = compute_means(X, y);
-        compute_biases(X, y, means);
+        compute_biases(y, means);
         compute_weights(means);
+
+        for (size_t i = 0; i < biases.size(); ++i) {
+            std::cout << biases[i] << " ";
+        }
     }
 
     std::vector<double> predict_single_proba(const std::vector<double> &x) {
@@ -233,37 +240,37 @@ public:
 private:
     std::vector<std::vector<double> > compute_means(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
         auto means = std::vector<std::vector<double> >(n_classes, std::vector<double>(X[0].size(), 0));
-        class_counts = std::vector<size_t>(n_classes, 0);
 
         // first a pass to compute the sums and class counts
         for (size_t i = 0; i < X.size(); ++i) {
             for (size_t j = 0; j < X[i].size(); ++j) {
                 means[y[i]][j] += X[i][j];
             }
-            class_counts[y[i]] += 1;
         }
 
-        for (size_t i = 0; i < X.size(); ++i) {
-            for (size_t j = 0; j < X[i].size(); ++j) {
-                means[y[i]][j] = (means[y[i]][j] + alpha) / (class_counts[y[i]] + 2 * alpha);
+        for (size_t i = 0; i < n_classes; ++i) {
+            for (size_t j = 0; j < means[0].size(); ++j) {
+                means[i][j] = (means[i][j] + alpha) / (class_counts[i] + 2 * alpha);
             }
         }
 
         return means;
     }
 
-    void compute_biases(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y, const std::vector<std::vector<double> > &means) {
+    void compute_biases(const std::vector<size_t> &y, const std::vector<std::vector<double> > &means) {
         biases = std::vector<double>(n_classes, 0);
 
         for (size_t k = 0; k < n_classes; ++k) {
             biases[k] = std::log(class_priors[k]);
-            for (size_t i = 0; i < X.size(); ++i) {
+            for (size_t i = 0; i < means[0].size(); ++i) {
                 biases[k] += std::log(1 - means[k][i]);
             }
         }
     }
 
     void compute_weights(const std::vector<std::vector<double> > &means) {
+        weights = std::vector<std::vector<double> >(n_classes, std::vector<double>(means[0].size(), 0));
+
         for (size_t i = 0; i < means.size(); ++i) {
             for (size_t j = 0; j < means[0].size(); ++j) {
                 weights[i][j] = std::log(means[i][j] / (1 - means[i][j]));
@@ -271,7 +278,6 @@ private:
         }
     }
 
-    std::vector<size_t> class_counts;
     std::vector<double> biases;
     std::vector<std::vector<double> > weights;
     double alpha;
@@ -313,9 +319,9 @@ private:
      * @return the sum of the features for each class
     */
     std::vector<std::vector<double> > compute_class_features_sum(const std::vector<std::vector<double> > &X, const std::vector<size_t> &y) {
-        std::vector<std::vector<double> > class_features_sum(n_classes, std::vector<double>(X[0].size(), 0));
+        std::vector<std::vector<double> > class_features_sum = std::vector<std::vector<double> >(n_classes, std::vector<double>(X[0].size(), 0));
         for (size_t i = 0; i < X.size(); ++i) {
-            for (size_t j = 0; j < X[i].size(); ++j) {
+            for (size_t j = 0; j < X[0].size(); ++j) {
                 class_features_sum[y[i]][j] += X[i][j];
             }
         }
@@ -346,7 +352,7 @@ private:
 
         weights = std::vector<std::vector<double> >(n_classes, std::vector<double>(X[0].size(), 0));
         for (size_t i = 0; i < n_classes; ++i) {
-            for (size_t j = 0; j < X[0].size(); ++j) {
+            for (size_t j = 0; j < weights[0].size(); ++j) {
                 weights[i][j] = std::log((class_features_sum[i][j] + alpha) / (sums[i] + alpha * X[0].size()));
             }
         }
@@ -354,7 +360,6 @@ private:
 
     double alpha;
     bool set_priors;
-    size_t n_classes;
     std::vector<std::vector<double> > weights;
 };
 

@@ -61,12 +61,12 @@ pair<vector<vector<double> >, vector<size_t> > read_dataset(const string &path) 
 
 
 int main(int argc, char const *argv[]) {
-    assert(argc == 5);
+    // assert(argc == 5);
 
-    string dataset_path = argv[1];
-    string classifier = argv[2];
-    double test_size = stod(argv[3]);
-    double alpha = stod(argv[4]);
+    string dataset_path = "digits.txt";
+    string classifier = "multinomial";
+    double test_size = 0.5;
+    double alpha = 1;
 
     auto dataset = read_dataset(dataset_path);
     auto data = dataset.first;
@@ -93,11 +93,19 @@ int main(int argc, char const *argv[]) {
         cout << "Accuracy: " << nb.score(test_data, test_labels) << endl;
     } else if (classifier == "multinomial") {
         MultinomialNB nb(alpha, {});
+
+        
         nb.fit(train_data, train_labels);
         
         cout << "Accuracy: " << nb.score(test_data, test_labels) << endl;
     } else if (classifier == "bernoulli") {
         BernoulliNB nb(alpha, {});
+        // binarize the data
+        for (size_t i = 0; i < train_data.size(); ++i) {
+            for (size_t j = 0; j < train_data[i].size(); ++j) {
+                train_data[i][j] = (train_data[i][j] >= 8 ) ? 1 : 0;
+            }
+        }
         nb.fit(train_data, train_labels);
     
         cout << "Accuracy: " << nb.score(test_data, test_labels) << endl;
